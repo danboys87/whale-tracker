@@ -1,0 +1,7 @@
+{
+  "explorerApiKey": "SJHK85DJKDCYNSFQFRHC4BWB1VWA224FX4",
+  "telegramBotToken": "your_telegram_bot_token",
+  "telegramChatId": "your_telegram_chat_id",
+  "minUsdValue": 250000,
+  "pollIntervalMs": 90000
+}

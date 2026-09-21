@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Whale Ledger</title>
+<style>
+  @font-face {
+    font-family: "system-mono";
+    src: local("SFMono-Regular"), local("Menlo"), local("Consolas");
+  }
+
+  :root {
+    --bg: #0a0d10;
+    --panel: #10151a;
+    --line: #1f2830;
+    --ink: #dfe6eb;
+    --ink-dim: #7c8a94;
+    --buy: #43c98a;
+    --sell: #e5715a;
+    --neutral: #5c7a8f;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 28px clamp(16px, 4vw, 48px) 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .title-block h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .title-block p {
+    margin: 6px 0 0;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--buy);
+    box-shadow: 0 0 0 3px rgba(67, 201, 138, 0.15);
+  }
+
+  .dot.stale { background: var(--neutral); box-shadow: 0 0 0 3px rgba(92, 122, 143, 0.15); }
+
+  main {
+    flex: 1;
+    padding: 24px clamp(16px, 4vw, 48px) 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .summary .cell {
+    background: var(--panel);
+    padding: 16px 18px;
+  }
+
+  .cell .label {
+    color: var(--ink-dim);
+    font-size: 0.75rem;
+    margin-bottom: 6px;
+  }
+
+  .cell .value {
+    font-family: var(--mono);
+    font-size: 1.3rem;
+    font-weight: 500;
+  }
+
+  .cell .value.buy { color: var(--buy); }
+  .cell .value.sell { color: var(--sell); }
+
+  .ledger {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 70px 150px 120px 90px 140px 100px;
+    justify-content: start;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+    font-size: 0.88rem;
+  }
+
+  .row.head {
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+    text-transform: none;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .row:last-child { border-bottom: none; }
+
+  .row:not(.head):hover { background: rgba(255,255,255,0.02); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+  }
+
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .badge.buy { color: var(--buy); }
+  .badge.buy::before { background: var(--buy); }
+  .badge.sell { color: var(--sell); }
+  .badge.sell::before { background: var(--sell); }
+  .badge.neutral { color: var(--neutral); }
+  .badge.neutral::before { background: var(--neutral); }
+
+  .amount {
+    font-family: var(--mono);
+    text-align: left;
+  }
+
+  .amount .usd {
+    color: var(--ink-dim);
+    font-size: 0.78rem;
+    display: block;
+  }
+
+  .time { color: var(--ink-dim); font-family: var(--mono); font-size: 0.8rem; }
+
+  .tx a {
+    color: var(--ink-dim);
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tx a:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+  .empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--ink-dim);
+  }
+
+  .empty .big {
+    font-family: var(--mono);
+    font-size: 2rem;
+    color: var(--neutral);
+    margin-bottom: 10px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--ink-dim);
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    padding: 10px 4px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+
+  .tab-btn.active {
+    color: var(--ink);
+    border-bottom-color: var(--neutral);
+  }
+
+  .tab-btn:hover { color: var(--ink); }
+
+  .panel { display: none; flex-direction: column; gap: 20px; }
+  .panel.active { display: flex; }
+
+  .addr-toolbar {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .btn-add {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    padding: 9px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .btn-add:hover { border-color: var(--ink-dim); }
+
+  .addr-form {
+    display: none;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .addr-form.open { display: flex; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+
+  .field label { font-size: 0.72rem; color: var(--ink-dim); }
+
+  .field input {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 9px 10px;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+  }
+
+  .field input:focus { outline: none; border-color: var(--neutral); }
+
+  .addr-form .actions { display: flex; gap: 8px; }
+
+  .btn-primary {
+    background: var(--neutral);
+    color: #06090b;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-cancel {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+    padding: 9px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .form-error {
+    color: var(--sell);
+    font-size: 0.8rem;
+    width: 100%;
+  }
+
+  .addr-row {
+    display: grid;
+    grid-template-columns: 1fr 200px 140px 40px;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+    font-size: 0.88rem;
+  }
+
+  .addr-row.head { color: var(--ink-dim); font-size: 0.72rem; }
+  .addr-row:last-child { border-bottom: none; }
+  .addr-row .addr { font-family: var(--mono); font-size: 0.82rem; word-break: break-all; }
+  .addr-row .added { color: var(--ink-dim); font-family: var(--mono); font-size: 0.78rem; }
+
+  .btn-remove {
+    background: none;
+    border: none;
+    color: var(--ink-dim);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .btn-remove:hover { color: var(--sell); }
+
+  @media (max-width: 640px) {
+    .addr-row { grid-template-columns: 1fr; gap: 4px; }
+    .addr-row.head { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 1fr; gap: 4px; padding: 14px; }
+    .row.head { display: none; }
+    .amount { text-align: left; }
+    .amount .usd { display: inline; margin-left: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Whale Ledger</h1>
+    <p id="subtitle">Memuat konfigurasi token…</p>
+  </div>
+  <div class="status">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">menghubungkan…</span>
+  </div>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ledger">Ledger</button>
+    <button class="tab-btn" data-tab="addresses">Address</button>
+    <button class="tab-btn" data-tab="tokens">Token</button>
+    <button class="tab-btn" data-tab="settings">Config</button>
+  </div>
+
+  <section class="panel active" id="panel-ledger">
+    <div class="addr-toolbar" style="justify-content: space-between; align-items: center;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color: var(--ink-dim); cursor:pointer;">
+        <input type="checkbox" id="toggleWalletToWallet" style="accent-color: var(--neutral);" />
+        Tampilkan Wallet→Wallet
+      </label>
+      <button class="btn-add" id="clearLogBtn">Bersihkan log</button>
+    </div>
+    <div class="summary">
+      <div class="cell">
+        <div class="label">Total alert</div>
+        <div class="value" id="statTotal">0</div>
+      </div>
+      <div class="cell">
+        <div class="label">Volume masuk (withdraw)</div>
+        <div class="value buy" id="statBuy">$0</div>
+      </div>
+      <div class="cell">
+        <div class="label">Volume keluar (deposit)</div>
+        <div class="value sell" id="statSell">$0</div>
+      </div>
+      <div class="cell">
+        <div class="label">Terbaru</div>
+        <div class="value" id="statLatest">—</div>
+      </div>
+    </div>
+
+    <div class="ledger">
+      <div class="row head">
+        <div>Waktu</div>
+        <div>Arah</div>
+        <div>Nilai (USD)</div>
+        <div>% Supply</div>
+        <div>Jumlah</div>
+        <div>TX</div>
+      </div>
+      <div id="rows">
+        <div class="empty">
+          <div class="big">···</div>
+          Belum ada data whale alert.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-addresses">
+    <div class="addr-toolbar">
+      <button class="btn-add" id="toggleFormBtn">+ Tambah address</button>
+    </div>
+
+    <form class="addr-form" id="addrForm">
+      <div class="field">
+        <label for="addrInput">Address</label>
+        <input id="addrInput" name="address" placeholder="0x..." autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="labelInput">Label</label>
+        <input id="labelInput" name="label" placeholder="cth. Binance 20, Wallet OTC" autocomplete="off" />
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn-primary">Simpan</button>
+        <button type="button" class="btn-cancel" id="cancelFormBtn">Batal</button>
+      </div>
+      <div class="form-error" id="formError" style="display:none;"></div>
+    </form>
+
+    <div class="ledger">
+      <div class="addr-row head">
+        <div>Address</div>
+        <div>Label</div>
+        <div>Ditambahkan</div>
+        <div></div>
+      </div>
+      <div id="addrRows">
+        <div class="empty">
+          <div class="big">···</div>
+          Belum ada address tersimpan.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-tokens">
+    <div class="addr-toolbar">
+      <button class="btn-add" id="toggleTokenFormBtn">+ Tambah token</button>
+    </div>
+
+    <form class="addr-form" id="tokenForm">
+      <div class="field">
+        <label for="tokenAddrInput">Contract address</label>
+        <input id="tokenAddrInput" name="address" placeholder="0x... (chain & simbol terdeteksi otomatis)" autocomplete="off" />
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn-primary" id="tokenSubmitBtn" disabled>Simpan</button>
+        <button type="button" class="btn-cancel" id="cancelTokenFormBtn">Batal</button>
+      </div>
+      <div class="form-error" id="tokenFormError" style="display:none;"></div>
+      <div class="form-error" id="tokenFormInfo" style="display:none; color: var(--buy);"></div>
+    </form>
+
+    <div class="ledger">
+      <div class="addr-row head">
+        <div>Contract address</div>
+        <div>Chain / Simbol</div>
+        <div>Ditambahkan</div>
+        <div></div>
+      </div>
+      <div id="tokenRows">
+        <div class="empty">
+          <div class="big">···</div>
+          Belum ada token yang dipantau.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-settings">
+    <form class="ledger" id="settingsForm" style="padding: 20px 22px; display:flex; flex-direction:column; gap:18px;">
+      <div class="field">
+        <label for="setExplorerKey">Explorer API Key (Etherscan)</label>
+        <input id="setExplorerKey" type="text" placeholder="dipakai untuk semua chain EVM (Etherscan V2)" autocomplete="off" />
+      </div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div class="field">
+          <label for="setTgToken">Telegram Bot Token</label>
+          <input id="setTgToken" type="text" placeholder="dari @BotFather" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="setTgChat">Telegram Chat ID</label>
+          <input id="setTgChat" type="text" placeholder="cth. 123456789" autocomplete="off" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div class="field" style="max-width:220px;">
+          <label for="setMinUsd">Threshold whale (USD)</label>
+          <input id="setMinUsd" type="number" min="1" step="any" />
+        </div>
+        <div class="field" style="max-width:220px;">
+          <label for="setPollSec">Interval polling (detik)</label>
+          <input id="setPollSec" type="number" min="5" step="1" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn-primary">Simpan konfigurasi</button>
+      </div>
+      <div class="form-error" id="settingsError" style="display:none;"></div>
+      <div class="form-error" id="settingsInfo" style="display:none; color: var(--buy);"></div>
+    </form>
+  </section>
+</main>
+
+<script>
+  const DIRECTION_MAP = {
+    WITHDRAW_FROM_EXCHANGE: { label: "Withdraw", cls: "buy" },
+    DEPOSIT_TO_EXCHANGE: { label: "Deposit", cls: "sell" },
+    WALLET_TO_WALLET: { label: "Wallet→Wallet", cls: "neutral" },
+  };
+
+  let CHAIN_EXPLORER = {}; // diisi dari /api/chains saat load
+  let latestAlerts = []; // data mentah hasil fetch terakhir, dipakai buat re-render saat toggle diubah
+  let showWalletToWallet = localStorage.getItem("showWalletToWallet") === "true";
+
+  async function loadChains() {
+    try {
+      const res = await fetch("/api/chains");
+      const chains = await res.json();
+      CHAIN_EXPLORER = Object.fromEntries(chains.map((c) => [c.key, c.explorerTxUrl]));
+    } catch {
+      // fallback kosong, link TX cukup nampilin hash tanpa href kalau gagal
+    }
+  }
+
+  function fmtUsd(n) {
+    return "$" + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  function fmtAmount(n) {
+    return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  function fmtPercent(n) {
+    if (n === null || n === undefined) return "—";
+    if (n < 0.0001) return "<0.0001%";
+    return n.toFixed(4) + "%";
+  }
+
+  function timeAgo(iso) {
+    const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (diffSec < 60) return diffSec + "d lalu";
+    if (diffSec < 3600) return Math.floor(diffSec / 60) + "m lalu";
+    if (diffSec < 86400) return Math.floor(diffSec / 3600) + "j lalu";
+    return Math.floor(diffSec / 86400) + "h lalu";
+  }
+
+  function visibleAlerts(alerts) {
+    // Wallet→Wallet tetap kesimpen di log, cuma disembunyikan dari
+    // tampilan default - kecuali toggle "Tampilkan Wallet→Wallet" aktif
+    if (showWalletToWallet) return alerts;
+    return alerts.filter((a) => a.direction !== "WALLET_TO_WALLET");
+  }
+
+  function renderRows(alerts) {
+    const rowsEl = document.getElementById("rows");
+    if (!alerts.length) {
+      rowsEl.innerHTML = '<div class="empty"><div class="big">···</div>Belum ada data whale alert.</div>';
+      return;
+    }
+    rowsEl.innerHTML = alerts
+      .map((a) => {
+        const dir = DIRECTION_MAP[a.direction] || DIRECTION_MAP.WALLET_TO_WALLET;
+        const explorer = CHAIN_EXPLORER[a.chain] || "#";
+        return `
+          <div class="row">
+            <div class="time">${timeAgo(a.loggedAt)}</div>
+            <div class="badge ${dir.cls}">${dir.label}${a.exchange ? " · " + a.exchange : ""}</div>
+            <div class="amount">${fmtUsd(a.usdValue)}<span class="usd"></span></div>
+            <div class="amount">${fmtPercent(a.percentOfSupply)}</div>
+            <div class="amount">${fmtAmount(a.amount)} ${a.symbol || ""}</div>
+            <div class="tx"><a href="${explorer}${a.hash}" target="_blank" rel="noopener">${a.hash.slice(0, 10)}…</a></div>
+          </div>`;
+      })
+      .join("");
+  }
+
+  function renderStats(alerts) {
+    document.getElementById("statTotal").textContent = alerts.length;
+
+    const buyTotal = alerts
+      .filter((a) => a.direction === "WITHDRAW_FROM_EXCHANGE")
+      .reduce((s, a) => s + a.usdValue, 0);
+    const sellTotal = alerts
+      .filter((a) => a.direction === "DEPOSIT_TO_EXCHANGE")
+      .reduce((s, a) => s + a.usdValue, 0);
+
+    document.getElementById("statBuy").textContent = fmtUsd(buyTotal);
+    document.getElementById("statSell").textContent = fmtUsd(sellTotal);
+    document.getElementById("statLatest").textContent = alerts[0] ? timeAgo(alerts[0].loggedAt) : "—";
+  }
+
+  async function refresh() {
+    const dot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    try {
+      const res = await fetch("/api/alerts", { cache: "no-store" });
+      if (!res.ok) throw new Error("bad response");
+      const alerts = await res.json();
+      latestAlerts = alerts;
+      const visible = visibleAlerts(alerts);
+      renderRows(visible);
+      renderStats(visible);
+      dot.classList.remove("stale");
+      statusText.textContent = "live · update tiap 30d";
+      document.getElementById("subtitle").textContent = alerts.length
+        ? `Memantau ${alerts[0].symbol || "token"} di ${alerts[0].chain || "chain"}`
+        : "Menunggu transaksi whale pertama…";
+    } catch (err) {
+      dot.classList.add("stale");
+      statusText.textContent = "tidak terhubung ke server";
+    }
+  }
+
+  refresh();
+  loadChains();
+  setInterval(refresh, 30000);
+
+  document.getElementById("clearLogBtn").addEventListener("click", async () => {
+    if (!confirm("Hapus semua histori alert? Ini nggak bisa dibatalin.")) return;
+    await fetch("/api/alerts", { method: "DELETE" });
+    refresh();
+  });
+
+  const toggleWtw = document.getElementById("toggleWalletToWallet");
+  toggleWtw.checked = showWalletToWallet;
+  toggleWtw.addEventListener("change", () => {
+    showWalletToWallet = toggleWtw.checked;
+    localStorage.setItem("showWalletToWallet", String(showWalletToWallet));
+    const visible = visibleAlerts(latestAlerts);
+    renderRows(visible);
+    renderStats(visible);
+  });
+
+  // --- Tab switching ---
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+      if (btn.dataset.tab === "addresses") refreshAddresses();
+      if (btn.dataset.tab === "tokens") refreshTokens();
+      if (btn.dataset.tab === "settings") loadSettings();
+    });
+  });
+
+  // --- Address form toggle ---
+  const addrForm = document.getElementById("addrForm");
+  document.getElementById("toggleFormBtn").addEventListener("click", () => {
+    addrForm.classList.toggle("open");
+    document.getElementById("formError").style.display = "none";
+  });
+  document.getElementById("cancelFormBtn").addEventListener("click", () => {
+    addrForm.classList.remove("open");
+    addrForm.reset();
+  });
+
+  function renderAddresses(list) {
+    const el = document.getElementById("addrRows");
+    if (!list.length) {
+      el.innerHTML = '<div class="empty"><div class="big">···</div>Belum ada address tersimpan.</div>';
+      return;
+    }
+    el.innerHTML = list
+      .map(
+        (a) => `
+        <div class="addr-row">
+          <div class="addr">${a.address}</div>
+          <div>${a.label}</div>
+          <div class="added">${new Date(a.addedAt).toLocaleDateString()}</div>
+          <button class="btn-remove" data-address="${a.address}" title="Hapus">✕</button>
+        </div>`
+      )
+      .join("");
+
+    el.querySelectorAll(".btn-remove").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await fetch("/api/addresses/" + encodeURIComponent(btn.dataset.address), { method: "DELETE" });
+        refreshAddresses();
+      });
+    });
+  }
+
+  async function refreshAddresses() {
+    try {
+      const res = await fetch("/api/addresses", { cache: "no-store" });
+      const list = await res.json();
+      renderAddresses(list);
+    } catch {
+      // biarkan tampilan kosong jika gagal
+    }
+  }
+
+  document.getElementById("addrForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const address = document.getElementById("addrInput").value.trim();
+    const label = document.getElementById("labelInput").value.trim();
+    const errorEl = document.getElementById("formError");
+
+    try {
+      const res = await fetch("/api/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, label }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal menyimpan");
+      }
+      addrForm.reset();
+      addrForm.classList.remove("open");
+      errorEl.style.display = "none";
+      refreshAddresses();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.style.display = "block";
+    }
+  });
+
+  // --- Token tab: auto-detect chain & simbol dari address ---
+  const tokenForm = document.getElementById("tokenForm");
+  const tokenAddrInput = document.getElementById("tokenAddrInput");
+  const tokenSubmitBtn = document.getElementById("tokenSubmitBtn");
+  const tokenFormError = document.getElementById("tokenFormError");
+  const tokenFormInfo = document.getElementById("tokenFormInfo");
+  let detectedToken = null;
+  let lookupTimer = null;
+
+  document.getElementById("toggleTokenFormBtn").addEventListener("click", () => {
+    tokenForm.classList.toggle("open");
+    resetTokenFormFeedback();
+  });
+  document.getElementById("cancelTokenFormBtn").addEventListener("click", () => {
+    tokenForm.classList.remove("open");
+    tokenForm.reset();
+    resetTokenFormFeedback();
+  });
+
+  function resetTokenFormFeedback() {
+    detectedToken = null;
+    tokenSubmitBtn.disabled = true;
+    tokenFormError.style.display = "none";
+    tokenFormInfo.style.display = "none";
+  }
+
+  tokenAddrInput.addEventListener("input", () => {
+    resetTokenFormFeedback();
+    clearTimeout(lookupTimer);
+    const address = tokenAddrInput.value.trim();
+    if (address.length < 8) return; // terlalu pendek, jangan lookup dulu
+
+    lookupTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/tokens/lookup?address=${encodeURIComponent(address)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          tokenFormError.textContent = data.error || "Token tidak ditemukan. Cek lagi address-nya.";
+          tokenFormError.style.display = "block";
+          return;
+        }
+
+        if (!data.supported) {
+          tokenFormError.textContent = `Terdeteksi di ${data.chainName}, tapi chain ini belum didukung untuk dipantau.`;
+          tokenFormError.style.display = "block";
+          return;
+        }
+
+        detectedToken = { address, chain: data.chainKey, symbol: data.symbol, name: data.name };
+        tokenFormInfo.textContent = `Ditemukan: ${data.symbol} (${data.name}) di ${data.chainName}`;
+        tokenFormInfo.style.display = "block";
+        tokenSubmitBtn.disabled = false;
+      } catch {
+        tokenFormError.textContent = "Gagal memeriksa address. Coba lagi.";
+        tokenFormError.style.display = "block";
+      }
+    }, 600); // debounce 600ms biar nggak nembak API tiap ketukan
+  });
+
+  function renderTokens(list) {
+    const el = document.getElementById("tokenRows");
+    if (!list.length) {
+      el.innerHTML = '<div class="empty"><div class="big">···</div>Belum ada token yang dipantau.</div>';
+      return;
+    }
+    el.innerHTML = list
+      .map(
+        (t) => `
+        <div class="addr-row">
+          <div class="addr">${t.address}</div>
+          <div>${t.chain}${t.symbol ? " · " + t.symbol : ""}</div>
+          <div class="added">${new Date(t.addedAt).toLocaleDateString()}</div>
+          <button class="btn-remove" data-address="${t.address}" data-chain="${t.chain}" title="Hapus">✕</button>
+        </div>`
+      )
+      .join("");
+
+    el.querySelectorAll(".btn-remove").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await fetch(`/api/tokens/${btn.dataset.chain}/${encodeURIComponent(btn.dataset.address)}`, {
+          method: "DELETE",
+        });
+        refreshTokens();
+      });
+    });
+  }
+
+  async function refreshTokens() {
+    try {
+      const res = await fetch("/api/tokens", { cache: "no-store" });
+      renderTokens(await res.json());
+    } catch {
+      // biarkan tampilan kosong jika gagal
+    }
+  }
+
+  tokenForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!detectedToken) return;
+
+    try {
+      const res = await fetch("/api/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(detectedToken),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal menyimpan");
+      }
+      tokenForm.reset();
+      tokenForm.classList.remove("open");
+      resetTokenFormFeedback();
+      refreshTokens();
+    } catch (err) {
+      tokenFormError.textContent = err.message;
+      tokenFormError.style.display = "block";
+    }
+  });
+
+  // --- Config tab ---
+  async function loadSettings() {
+    try {
+      const res = await fetch("/api/settings");
+      const s = await res.json();
+      document.getElementById("setExplorerKey").value = s.explorerApiKey || "";
+      document.getElementById("setTgToken").value = s.telegramBotToken || "";
+      document.getElementById("setTgChat").value = s.telegramChatId || "";
+      document.getElementById("setMinUsd").value = s.minUsdValue;
+      document.getElementById("setPollSec").value = Math.round(s.pollIntervalMs / 1000);
+    } catch {
+      // biarkan form kosong kalau gagal load
+    }
+  }
+
+  document.getElementById("settingsForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById("settingsError");
+    const infoEl = document.getElementById("settingsInfo");
+    errorEl.style.display = "none";
+    infoEl.style.display = "none";
+
+    const payload = {
+      explorerApiKey: document.getElementById("setExplorerKey").value.trim(),
+      telegramBotToken: document.getElementById("setTgToken").value.trim(),
+      telegramChatId: document.getElementById("setTgChat").value.trim(),
+      minUsdValue: document.getElementById("setMinUsd").value,
+      pollIntervalMs: Number(document.getElementById("setPollSec").value) * 1000,
+    };
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal menyimpan konfigurasi");
+
+      infoEl.textContent = "Konfigurasi tersimpan dan langsung berlaku (tanpa restart).";
+      infoEl.style.display = "block";
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.style.display = "block";
+    }
+  });
+</script>
+
+</body>
+</html>
